@@ -1,5 +1,6 @@
 package com.github.joehaivo.removebutterknife
 
+import com.fasterxml.aalto.util.TextUtil
 import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.command.WriteCommandAction
@@ -186,7 +187,22 @@ class ButterActionDelegate(
                 e.printStackTrace()
             }
             // 将__bindViews();调用插入到anchorMethod里anchorStatement之后
-            val para = if (butterknifeView == null) "" else butterknifeView
+
+            //common impl
+            var para = if (butterknifeView == null) "" else butterknifeView
+            /**
+             * private project start
+             */
+
+            //fragment impl
+            val parameters = this.anchorMethod?.parameterList?.parameters
+            if ((parameters?.size ?: 0) > 0){
+                para = parameters?.get(0)?.name
+            }
+
+            /**
+             * private project stop
+             */
             val callBindViewsState = elementFactory.createStatementFromText("__bindViews($para);\n", this.psiClass)
             anchorStatement =
                 anchorMethod?.addAfter(callBindViewsState, anchorStatement) as? PsiStatement
@@ -236,7 +252,8 @@ class ButterActionDelegate(
     // 找到`super.onCreateView(`语句及所在方法
     private fun findOnCreateView(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
         val pair = findStatement(psiClass) {
-            it.firstChild.text.trim().contains("super.onCreateView(")
+            val childContent = it.firstChild.text.trim()
+            childContent.contains("super.onCreateView(") ||statementCheck(childContent)
         }
         if (pair.second != null) {
             butterknifeView = "view"
@@ -558,5 +575,14 @@ class ButterActionDelegate(
             deleteButterKnifeStatement(it)
             handleInnerClass(it.innerClasses)
         }
+    }
+
+    //debug info
+    private fun log(logContent: String){
+        Notifier.notifyError(project!!, logContent)
+    }
+
+    private fun statementCheck(childText: String): Boolean{
+        return childText.contains("step")
     }
 }

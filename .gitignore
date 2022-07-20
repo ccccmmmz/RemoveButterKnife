@@ -40,3 +40,9 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/.idea/.gitignore
+/.idea/vcs.xml
+/.idea/gradle.xml
+/.idea/codeStyles/codeStyleConfig.xml
+/.idea/misc.xml
+/.idea/codeStyles/Project.xml
