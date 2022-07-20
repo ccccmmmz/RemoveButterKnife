@@ -18,6 +18,8 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.progress.ProgressManager
+import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.decompiler.classFile.KtClsFile
 
 
 class Entrance(private val e: AnActionEvent) {
@@ -89,7 +91,7 @@ class Entrance(private val e: AnActionEvent) {
         if (it.isDirectory) {
             handleDirectory(it)
         } else {
-            if (it.fileType is JavaFileType) {
+            if (it.fileType is JavaFileType || it.fileType is KotlinFileType) {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
                 val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)
                 handleSingleVirtualFile(it, psiFile, psiClass)

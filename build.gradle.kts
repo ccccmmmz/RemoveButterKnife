@@ -18,10 +18,11 @@ repositories {
 intellij {
     version.set("2021.2")
     type.set("IU") // Target IDE Platform
-//    localPath.set("/Applications/Android Studio.app/Contents")
+    //Target IDE Platform install path
+//    localPath.set("/Users/ligen/Applications/JetBrains Toolbox/IntelliJ IDEA Ultimate.app/Contents")
     plugins.set(
         listOf(
-//            "Kotlin",
+            "Kotlin",
 //            "android",
 //            "git4idea",
             "java",
