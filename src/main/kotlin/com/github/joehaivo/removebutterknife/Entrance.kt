@@ -1,8 +1,11 @@
 package com.github.joehaivo.removebutterknife
 
+import com.github.joehaivo.removebutterknife.utils.Notifier
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.ui.DialogBuilder
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
@@ -11,13 +14,8 @@ import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ArrayUtil
-import com.github.joehaivo.removebutterknife.utils.Logger
-import com.github.joehaivo.removebutterknife.utils.Notifier
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.readAction
-import com.intellij.openapi.application.runReadAction
-import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.progress.ProgressManager
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtFile
 
 
 class Entrance(private val e: AnActionEvent) {
@@ -47,21 +45,28 @@ class Entrance(private val e: AnActionEvent) {
 
     private fun startHandle(vFiles: Array<out VirtualFile>?) {
         if (!ArrayUtil.isEmpty(vFiles)) {
-            ProgressManager.getInstance().runProcessWithProgressSynchronously({
-                val progressIndicator = ProgressManager.getInstance().progressIndicator
-                vFiles?.forEachIndexed { index, vFile ->
-                    progressIndicator.checkCanceled()
-                    progressIndicator.text2 = "($index/${vFiles.size}) '${vFile.name}'... "
-                    progressIndicator.fraction = index.toDouble() / vFiles.size
-                    handle(vFile)
-                }
-                showResult()
-            }, "正在处理Java文件", true, project)
+
+            try {
+                ProgressManager.getInstance().runProcessWithProgressSynchronously({
+                    val progressIndicator = ProgressManager.getInstance().progressIndicator
+                    vFiles?.forEachIndexed { index, vFile ->
+                        progressIndicator.checkCanceled()
+                        progressIndicator.text2 = "($index/${vFiles.size}) '${vFile.name}'... "
+                        progressIndicator.fraction = index.toDouble() / vFiles.size
+                        handle(vFile)
+                    }
+                    showResult()
+                }, "正在处理Java文件", true, project)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
         }
 //        vFiles?.forEachIndexed { index, vFile ->
 //            handle(vFile)
 //        }
 //        showResult()
+
     }
 
     fun showDialogWhenBatch(nextAction: (isContinue: Boolean) -> Unit) {
@@ -89,10 +94,17 @@ class Entrance(private val e: AnActionEvent) {
         if (it.isDirectory) {
             handleDirectory(it)
         } else {
-            if (it.fileType is JavaFileType) {
+            if (it.fileType is JavaFileType || it.fileType.name == "Kotlin") {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
-                val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)
-                handleSingleVirtualFile(it, psiFile, psiClass)
+                if (psiFile is PsiJavaFile) {
+                    //java branch
+                    val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)
+
+                    handleSingleVirtualFile(it, psiFile, psiClass)
+                } else if (psiFile is KtFile){
+                    val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, KtClass::class.java)
+                    handleSingleVirtualFile(it, psiFile, psiClass)
+                }
             }
         }
     }
@@ -127,6 +139,34 @@ class Entrance(private val e: AnActionEvent) {
         }
     }
 
+    private fun handleSingleVirtualFile(vJavaFile: VirtualFile?, psiFile: PsiFile?, psiClass: KtClass?) {
+
+        if (vJavaFile != null && psiFile is KtFile && psiClass != null){
+            currFileIndex++
+            onProgressUpdate?.invoke(vJavaFile, currFileIndex, javaFileCount)
+            try {
+                writeAction(psiFile) {
+                    val parsed = ButterActionDelegateForKt(e, psiFile, psiClass).parse()
+                    if (parsed) {
+                        parsedFileCount++
+                        Notifier.notifyInfo(e.project!!, "$currFileIndex. ${vJavaFile.name} 处理结束 √ ")
+                    } else {
+                        Notifier.notifyInfo(e.project!!, "$currFileIndex. ${vJavaFile.name}没有找到butterknife的相关引用，不处理 - ")
+                    }
+                }
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                exceptionFileCount++
+                Notifier.notifyError(e.project!!, "$currFileIndex. ${vJavaFile.name} 处理结束 × ")
+            }
+        }
+
+    }
+
+    private fun findKotlinSampleFileName(vJavaFile: VirtualFile?, psiFile: PsiFile?, psiClass: PsiClass?) : Boolean{
+       return false
+    }
+
     fun calJavaFileCount(vFiles: Array<VirtualFile>?) {
         javaFileCount = 0
         if (!ArrayUtil.isEmpty(vFiles)) {
@@ -142,6 +182,7 @@ class Entrance(private val e: AnActionEvent) {
                 count(it)
             }
         } else {
+            //todo kotlin file condition
             if (it.fileType is JavaFileType) {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
                 val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)
@@ -159,5 +200,10 @@ class Entrance(private val e: AnActionEvent) {
     ) {
         WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
 //        ApplicationManager.getApplication().runWriteAction(runnable)
+    }
+
+
+    private fun log(content: String){
+        Notifier.notifyInfo(project!!, content)
     }
 }
