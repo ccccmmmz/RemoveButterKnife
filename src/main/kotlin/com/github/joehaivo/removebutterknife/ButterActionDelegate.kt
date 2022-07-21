@@ -1,6 +1,5 @@
 package com.github.joehaivo.removebutterknife
 
-import com.fasterxml.aalto.util.TextUtil
 import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.command.WriteCommandAction
@@ -187,22 +186,10 @@ class ButterActionDelegate(
                 e.printStackTrace()
             }
             // 将__bindViews();调用插入到anchorMethod里anchorStatement之后
-
-            //common impl
-            var para = if (butterknifeView == null) "" else butterknifeView
-            /**
-             * private project start
-             */
-
-            //fragment impl
-            val parameters = this.anchorMethod?.parameterList?.parameters
-            if ((parameters?.size ?: 0) > 0){
-                para = parameters?.get(0)?.name
-            }
-
-            /**
-             * private project stop
-             */
+            //stepView impl
+            val parameterList = this.anchorMethod?.parameterList?.parameters
+            val para = if (parameterList?.size == 0) "" else parameterList?.get(0)?.name
+            log(" para = ${parameterList?.get(0)}")
             val callBindViewsState = elementFactory.createStatementFromText("__bindViews($para);\n", this.psiClass)
             anchorStatement =
                 anchorMethod?.addAfter(callBindViewsState, anchorStatement) as? PsiStatement
@@ -252,8 +239,8 @@ class ButterActionDelegate(
     // 找到`super.onCreateView(`语句及所在方法
     private fun findOnCreateView(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
         val pair = findStatement(psiClass) {
-            val childContent = it.firstChild.text.trim()
-            childContent.contains("super.onCreateView(") ||statementCheck(childContent)
+            it.firstChild.text.trim().contains("super.onCreateView(")||
+                    it.text.trim().contains("stepAllViews")
         }
         if (pair.second != null) {
             butterknifeView = "view"
@@ -385,12 +372,17 @@ class ButterActionDelegate(
     private fun findStatement(psiClass: PsiClass, predicate: Predicate<PsiStatement>): Pair<PsiMethod?, PsiStatement?> {
         var bindState: PsiStatement? = null
         val bindMethod = psiClass.methods.find { psiMethod ->
+            log("psiMethod $psiMethod")
             bindState = psiMethod.body?.statements?.find { psiStatement ->
                 predicate.test(psiStatement)
             }
             bindState != null
         }
         return Pair(bindMethod, bindState)
+    }
+
+    private fun log(content: String){
+        Notifier.notifyInfo(project!!, content)
     }
 
     // 遍历psiFields找到包含BindView注解的字段
@@ -400,8 +392,11 @@ class ButterActionDelegate(
         psiFields.forEach {
             it.annotations.forEach { psiAnnotation: PsiAnnotation ->
                 // 记录这个psiField, 将BindView注解删掉
+                log("注解名称 = ${psiAnnotation.qualifiedName}, with")
                 if (psiAnnotation.qualifiedName?.contains("BindView") == true) {
+                    log("R.id.view value = " + psiAnnotation.findAttributeValue("value")?.text.orEmpty())
                     val R_id_view = psiAnnotation.findAttributeValue("value")?.text?.replace("R2", "R")
+                    log("R_id_view = $R_id_view")
                     if (R_id_view != null) {
                         knifeFields[R_id_view] = it
                         bindViewAnnotations.add(psiAnnotation)
@@ -575,14 +570,5 @@ class ButterActionDelegate(
             deleteButterKnifeStatement(it)
             handleInnerClass(it.innerClasses)
         }
-    }
-
-    //debug info
-    private fun log(logContent: String){
-        Notifier.notifyError(project!!, logContent)
-    }
-
-    private fun statementCheck(childText: String): Boolean{
-        return childText.contains("step")
     }
 }

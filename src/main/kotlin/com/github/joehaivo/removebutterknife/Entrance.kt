@@ -1,11 +1,8 @@
 package com.github.joehaivo.removebutterknife
 
-import com.github.joehaivo.removebutterknife.utils.Notifier
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.command.WriteCommandAction
-import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.ui.DialogBuilder
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
@@ -14,8 +11,13 @@ import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ArrayUtil
-import org.jetbrains.kotlin.idea.KotlinFileType
-import org.jetbrains.kotlin.psi.KtFile
+import com.github.joehaivo.removebutterknife.utils.Logger
+import com.github.joehaivo.removebutterknife.utils.Notifier
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.progress.ProgressManager
 
 
 class Entrance(private val e: AnActionEvent) {
@@ -46,7 +48,6 @@ class Entrance(private val e: AnActionEvent) {
     private fun startHandle(vFiles: Array<out VirtualFile>?) {
         if (!ArrayUtil.isEmpty(vFiles)) {
             ProgressManager.getInstance().runProcessWithProgressSynchronously({
-                log("startHandle runProcessWithProgressSynchronously enter")
                 val progressIndicator = ProgressManager.getInstance().progressIndicator
                 vFiles?.forEachIndexed { index, vFile ->
                     progressIndicator.checkCanceled()
@@ -85,12 +86,10 @@ class Entrance(private val e: AnActionEvent) {
     }
 
     private fun handle(it: VirtualFile) {
-        log("handle enter " + it.fileType.name)
         if (it.isDirectory) {
             handleDirectory(it)
         } else {
-            if (it.fileType is JavaFileType || it.fileType is KotlinFileType) {
-                log("handle enter 2")
+            if (it.fileType is JavaFileType) {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
                 val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)
                 handleSingleVirtualFile(it, psiFile, psiClass)
@@ -106,11 +105,7 @@ class Entrance(private val e: AnActionEvent) {
 
 
     private fun handleSingleVirtualFile(vJavaFile: VirtualFile?, psiFile: PsiFile?, psiClass: PsiClass?) {
-        log("handleSingleVirtualFile 1")
         if (interrupt) return
-        if (vJavaFile?.fileType is KotlinFileType) {
-            Notifier.notifyInfo(project!!, "kt file can find ${(psiFile as? KtFile) == null}")
-        }
         if (vJavaFile != null && psiFile is PsiJavaFile && psiClass != null) {
             currFileIndex++
             onProgressUpdate?.invoke(vJavaFile, currFileIndex, javaFileCount)
@@ -164,9 +159,5 @@ class Entrance(private val e: AnActionEvent) {
     ) {
         WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
 //        ApplicationManager.getApplication().runWriteAction(runnable)
-    }
-
-    private fun log(logContent: String){
-        Notifier.notifyError(project!!, logContent)
     }
 }
