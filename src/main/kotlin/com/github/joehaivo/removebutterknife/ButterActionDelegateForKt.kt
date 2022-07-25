@@ -4,14 +4,10 @@ import com.github.joehaivo.removebutterknife.utils.Logger
 import com.github.joehaivo.removebutterknife.utils.Notifier
 import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.*
 import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.util.ArrayUtil
-import org.codehaus.groovy.antlr.AntlrParserPlugin.qualifiedName
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtFile
 import java.util.function.Predicate
@@ -49,40 +45,41 @@ class ButterActionDelegateForKt(
 
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
+            log("no need modify")
             return false
         }
-        replaceDebouncingOnClickListener()
+//        replaceDebouncingOnClickListener()
 
-        val (bindViewFields, bindViewAnnotations) = collectBindViewAnnotation(psiClass.fields)
-        val (bindClickVos, onClickAnnotations) = collectOnClickAnnotation(psiClass)
-        if (bindClickVos.isNotEmpty() || bindViewFields.isNotEmpty()) {
-            val pair = findAnchors(psiClass)
-            if (pair.second == null || pair.first == null) {
+//        val (bindViewFields, bindViewAnnotations) = collectBindViewAnnotation(psiClass.fields)
+//        val (bindClickVos, onClickAnnotations) = collectOnClickAnnotation(psiClass)
+//        if (bindClickVos.isNotEmpty() || bindViewFields.isNotEmpty()) {
+//            val pair = findAnchors(psiClass)
+//            if (pair.second == null || pair.first == null) {
 //            targetInsertFindViewPair = genOverrideOnCreate()
-                Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过")
-                Logger.error("${anchorMethod}, $anchorStatement should not be null!")
-            } else {
-                anchorMethod = pair.first
-                anchorStatement = pair.second
-                insertBindViewsMethod(psiClass, bindViewFields, bindViewAnnotations)
-                insertBindClickMethod(psiClass, bindClickVos, onClickAnnotations)
-            }
-        }
+//                Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过")
+//                Logger.error("${anchorMethod}, $anchorStatement should not be null!")
+//            } else {
+//                anchorMethod = pair.first
+//                anchorStatement = pair.second
+//                insertBindViewsMethod(psiClass, bindViewFields, bindViewAnnotations)
+//                insertBindClickMethod(psiClass, bindClickVos, onClickAnnotations)
+//            }
+//        }
 
-        deleteButterKnifeStatement(psiClass)
+//        deleteButterKnifeStatement(psiClass)
 
         deleteImportButterKnife()
 
         // 内部类
-        handleInnerClass(psiClass.innerClasses)
+//        handleInnerClass(psiClass.innerClasses)
         return true
     }
 
     private fun checkIsNeedModify(): Boolean {
-        val importStatement = psiJavaFile.importList?.importStatements?.find {
-            it.qualifiedName?.toLowerCase()?.contains("butterknife") == true
-        }
-        return importStatement != null
+        val needModify = psiJavaFile.importList?.imports?.stream()?.filter {
+            it.text?.contains("butterknife") == true
+        }?.findFirst()
+        return needModify?.isPresent?: false
     }
 
     private fun deleteButterKnifeStatement(psiClass: PsiClass) {
@@ -152,7 +149,7 @@ class ButterActionDelegateForKt(
             pair = findOnCreate(psiClass)
         }
         if (pair.second == null) {
-            pair = insertInflaterViewStatementOnCreateView()
+//            pair = insertInflaterViewStatementOnCreateView()
         }
         if (pair.second == null) {
             pair = findConstructorAsAnchor(psiClass)
@@ -204,8 +201,8 @@ class ButterActionDelegateForKt(
 
     // 删除import butterKnife.*语句
     private fun deleteImportButterKnife() {
-        psiJavaFile.importList?.importStatements?.filter {
-            it.qualifiedName?.contains("butterknife") == true
+        psiJavaFile.importDirectives.stream().filter {
+            it.text?.contains("butterknife") == true
         }?.forEach { importStatement ->
             writeAction {
                 importStatement.delete()
@@ -267,36 +264,36 @@ class ButterActionDelegateForKt(
     }
 
     // 当存在provideLayout()，并且没有找到ButterKnife.bind( | super.onCreateView( | super.onCreate(时， 插入View _view = inflater.inflate()
-    private fun insertInflaterViewStatementOnCreateView(): Pair<PsiMethod?, PsiStatement?> {
-        var pair: Pair<PsiMethod?, PsiStatement?> = Pair(null, null)
-        val onCreateViewMethod = psiClass.methods.find {
-            it.text.contains("View onCreateView(")
-        } ?: return pair
-        val provideLayoutMethod = psiClass.methods.find {
-            it.text.contains("int provideLayout(")
-        } ?: return pair
-        val onCreateViewParams = onCreateViewMethod.parameterList.parameters
-        if (onCreateViewParams.size == 3) {
-            val inflateViewState = elementFactory.createStatementFromText(
-                "View _view = ${onCreateViewParams[0].name}.inflate(provideLayout(), ${onCreateViewParams[1].name}, false);",
-                psiClass
-            )
-            var insertedState: PsiElement? = null
-            writeAction {
-                val body = onCreateViewMethod.body
-                if (body != null && body.statementCount > 0) {
-                    insertedState = body.addBefore(inflateViewState, body.statements[0])
-                } else {
-                    insertedState = body?.add(inflateViewState)
-                }
-            }
-            if (insertedState != null) {
-                butterknifeView = "_view"
-                pair = Pair(onCreateViewMethod, insertedState as PsiStatement)
-            }
-        }
-        return pair
-    }
+//    private fun insertInflaterViewStatementOnCreateView(): Pair<PsiMethod?, PsiStatement?> {
+//        var pair: Pair<PsiMethod?, PsiStatement?> = Pair(null, null)
+//        val onCreateViewMethod = psiClass.methods.find {
+//            it.text.contains("View onCreateView(")
+//        } ?: return pair
+//        val provideLayoutMethod = psiClass.methods.find {
+//            it.text.contains("int provideLayout(")
+//        } ?: return pair
+//        val onCreateViewParams = onCreateViewMethod.parameterList.parameters
+//        if (onCreateViewParams.size == 3) {
+//            val inflateViewState = elementFactory.createStatementFromText(
+//                "View _view = ${onCreateViewParams[0].name}.inflate(provideLayout(), ${onCreateViewParams[1].name}, false);",
+//                psiClass
+//            )
+//            var insertedState: PsiElement? = null
+//            writeAction {
+//                val body = onCreateViewMethod.body
+//                if (body != null && body.statementCount > 0) {
+//                    insertedState = body.addBefore(inflateViewState, body.statements[0])
+//                } else {
+//                    insertedState = body?.add(inflateViewState)
+//                }
+//            }
+//            if (insertedState != null) {
+//                butterknifeView = "_view"
+//                pair = Pair(onCreateViewMethod, insertedState as PsiStatement)
+//            }
+//        }
+//        return pair
+//    }
 
     private fun findConstructorAsAnchor(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
         var pair: Pair<PsiMethod?, PsiStatement?> = Pair(null, null)
@@ -351,25 +348,25 @@ class ButterActionDelegateForKt(
         return pair
     }
 
-    fun genOverrideOnCreate(): Pair<PsiMethod?, PsiStatement?> {
-        val onCreateMethod = elementFactory.createMethodFromText(
-            "" +
-                    "protected void onCreate(Bundle savedInstanceState) { }", psiClass
-        )
-        val callSuperStatement =
-            elementFactory.createStatementFromText("super.onCreate(savedInstanceState);\n", psiClass)
-        val firstMethod = psiClass.methods.firstOrNull()
-        writeAction {
-            onCreateMethod.lastChild.add(callSuperStatement)
-            if (firstMethod != null) {
-                psiClass.addAfter(onCreateMethod, firstMethod)
-            } else {
-                psiClass.add(onCreateMethod)
-            }
-//            callback(Pair(onCreateMethod, callSuperStatement))
-        }
-        return Pair(onCreateMethod, callSuperStatement)
-    }
+//    fun genOverrideOnCreate(): Pair<PsiMethod?, PsiStatement?> {
+//        val onCreateMethod = elementFactory.createMethodFromText(
+//            "" +
+//                    "protected void onCreate(Bundle savedInstanceState) { }", psiClass
+//        )
+//        val callSuperStatement =
+//            elementFactory.createStatementFromText("super.onCreate(savedInstanceState);\n", psiClass)
+//        val firstMethod = psiClass.methods.firstOrNull()
+//        writeAction {
+//            onCreateMethod.lastChild.add(callSuperStatement)
+//            if (firstMethod != null) {
+//                psiClass.addAfter(onCreateMethod, firstMethod)
+//            } else {
+//                psiClass.add(onCreateMethod)
+//            }
+////            callback(Pair(onCreateMethod, callSuperStatement))
+//        }
+//        return Pair(onCreateMethod, callSuperStatement)
+//    }
 
 
     private fun findStatement(psiClass: PsiClass, predicate: Predicate<PsiStatement>): Pair<PsiMethod?, PsiStatement?> {
@@ -429,7 +426,7 @@ class ButterActionDelegateForKt(
                     "private void __bindClicks(View ${butterknifeView}) {}\n", psiClass
                 )
             }
-            importMyDebouncingListenerIfAbsent()
+//            importMyDebouncingListenerIfAbsent()
             onClickVOs.forEach {
                 val setClickState = elementFactory.createStatementFromText(
                     "${caller}findViewById(${it.viewId}).setOnClickListener((DebouncingOnClickListener) ${it.lambdaParam} -> ${it.callMethodExpr});",
@@ -450,19 +447,19 @@ class ButterActionDelegateForKt(
         }
     }
 
-    private fun importMyDebouncingListenerIfAbsent() {
-        deBouncingClass ?: return
-        val debouncingImportState = psiJavaFile.importList?.importStatements?.find {
-            it.qualifiedName?.contains("DebouncingOnClickListener") == true
-        }
-        // import列表不存在DebouncingOnClickListener类，import它
-        if (debouncingImportState == null) {
-            writeAction {
-                val statement = elementFactory.createImportStatement(deBouncingClass!!)
-                psiJavaFile.addBefore(statement, psiJavaFile.importList?.importStatements?.lastOrNull())
-            }
-        }
-    }
+//    private fun importMyDebouncingListenerIfAbsent() {
+//        deBouncingClass ?: return
+//        val debouncingImportState = psiJavaFile.importList?.importStatements?.find {
+//            it.qualifiedName?.contains("DebouncingOnClickListener") == true
+//        }
+//        // import列表不存在DebouncingOnClickListener类，import它
+//        if (debouncingImportState == null) {
+//            writeAction {
+//                val statement = elementFactory.createImportStatement(deBouncingClass!!)
+//                psiJavaFile.addBefore(statement, psiJavaFile.importList?.importStatements?.lastOrNull())
+//            }
+//        }
+//    }
 
     private fun collectOnClickAnnotation(psiClass: PsiClass): Pair<MutableList<BindClickVO>, MutableList<PsiAnnotation>> {
         val onClickVOs: MutableList<BindClickVO> = mutableListOf()
@@ -499,56 +496,56 @@ class ButterActionDelegateForKt(
         onClickVOs.add(BindClickVO(viewId, lambdaParam, "${method.name}($methodParam)"))
     }
 
-    private fun implementViewClick() {
-        val fullPkgName = "android.view.View.OnClickListener"
-        val clickImpl = psiClass.implementsList?.referencedTypes?.find {
-            it.canonicalText.contains("View.OnClickListener")
-        }
-        if (clickImpl != null) {
-            return
-        }
-        val ref = elementFactory.createPackageReferenceElement(fullPkgName)
-        val refClass = elementFactory.createType(ref)
-        val referenceElement = elementFactory.createReferenceElementByType(refClass)
-        writeAction {
-            psiClass.implementsList?.add(referenceElement)
-        }
-    }
+//    private fun implementViewClick() {
+//        val fullPkgName = "android.view.View.OnClickListener"
+//        val clickImpl = psiClass.implementsList?.referencedTypes?.find {
+//            it.canonicalText.contains("View.OnClickListener")
+//        }
+//        if (clickImpl != null) {
+//            return
+//        }
+//        val ref = elementFactory.createPackageReferenceElement(fullPkgName)
+//        val refClass = elementFactory.createType(ref)
+//        val referenceElement = elementFactory.createReferenceElementByType(refClass)
+//        writeAction {
+//            psiClass.implementsList?.add(referenceElement)
+//        }
+//    }
 
     private fun writeAction(commandName: String = "RemoveButterknifeWriteAction", runnable: Runnable) {
         WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
 //        ApplicationManager.getApplication().runWriteAction(runnable)
     }
 
-    private fun replaceDebouncingOnClickListener() {
-        if (deBouncingClass == null) {
-            val fullClassName = "DebouncingOnClickListener"
-            val searchScope = GlobalSearchScope.allScope(project!!)
-            val psiClasses = PsiShortNamesCache.getInstance(project).getClassesByName(fullClassName, searchScope)
-            deBouncingClass = psiClasses.find {
-                it.qualifiedName?.contains("butterknife") == false
-            }
-        }
-        val importDebouncingStatement = psiJavaFile.importList?.importStatements?.find {
-            it.qualifiedName?.contains("butterknife.internal.DebouncingOnClickListener") == true
-        }
-        if (importDebouncingStatement == null) {
-            return
-        }
-        runWriteAction {
-            if (deBouncingClass != null) {
-                val statement = elementFactory.createImportStatement(deBouncingClass!!)
-                try {
-                    psiJavaFile.addBefore(statement, importDebouncingStatement)
-                    importDebouncingStatement.delete()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            } else {
-                Notifier.notifyError(project!!, "RemoveButterKnife tool: ${psiClass.name}没有找到可替代的DebouncingOnClickListener类，跳过！")
-            }
-        }
-    }
+//    private fun replaceDebouncingOnClickListener() {
+//        if (deBouncingClass == null) {
+//            val fullClassName = "DebouncingOnClickListener"
+//            val searchScope = GlobalSearchScope.allScope(project!!)
+//            val psiClasses = PsiShortNamesCache.getInstance(project).getClassesByName(fullClassName, searchScope)
+//            deBouncingClass = psiClasses.find {
+//                it.qualifiedName?.contains("butterknife") == false
+//            }
+//        }
+//        val importDebouncingStatement = psiJavaFile.importList?.importStatements?.find {
+//            it.qualifiedName?.contains("butterknife.internal.DebouncingOnClickListener") == true
+//        }
+//        if (importDebouncingStatement == null) {
+//            return
+//        }
+//        runWriteAction {
+//            if (deBouncingClass != null) {
+//                val statement = elementFactory.createImportStatement(deBouncingClass!!)
+//                try {
+//                    psiJavaFile.addBefore(statement, importDebouncingStatement)
+//                    importDebouncingStatement.delete()
+//                } catch (e: Exception) {
+//                    e.printStackTrace()
+//                }
+//            } else {
+//                Notifier.notifyError(project!!, "RemoveButterKnife tool: ${psiClass.name}没有找到可替代的DebouncingOnClickListener类，跳过！")
+//            }
+//        }
+//    }
 
     private fun handleInnerClass(innerClasses: Array<PsiClass>?) {
         innerClasses?.forEach {
