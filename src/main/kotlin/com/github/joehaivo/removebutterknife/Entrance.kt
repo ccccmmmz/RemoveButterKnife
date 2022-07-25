@@ -28,6 +28,8 @@ class Entrance(private val e: AnActionEvent) {
 
     var onProgressUpdate: ((currFile: VirtualFile, currJavaFileIndex: Int, totalJavaFileCount: Int) -> Unit)? = null
 
+    private val mIgnoreDirectorySet by lazy { hashSetOf("build", "gradle", "idea", "libs", "res", "assets", "jniLibs") }
+
     fun run() {
         // 多选文件、多级目录、单目录、单文件
         val vFiles = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
@@ -177,12 +179,11 @@ class Entrance(private val e: AnActionEvent) {
     }
 
     private fun count(it: VirtualFile) {
-        if (it.isDirectory) {
+        if (it.isDirectory && !mIgnoreDirectorySet.contains(it.name)) {
             it.children.forEach {
                 count(it)
             }
-        } else {
-            //todo kotlin file condition
+        } else if (!it.isDirectory){
             if (it.fileType is JavaFileType) {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
                 val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)
