@@ -1,16 +1,16 @@
 package com.github.joehaivo.removebutterknife
 
+import com.github.joehaivo.removebutterknife.utils.Logger
+import com.github.joehaivo.removebutterknife.utils.Notifier
 import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.*
 import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.util.ArrayUtil
-import com.github.joehaivo.removebutterknife.utils.Logger
-import com.github.joehaivo.removebutterknife.utils.Notifier
-import com.intellij.openapi.application.runWriteAction
 import java.util.function.Predicate
 
 
@@ -43,6 +43,8 @@ class ButterActionDelegate(
     private var butterknifeBindStatement: PsiStatement? = null
 
     private var deBouncingClass: PsiClass? = null
+
+    private val mMatchMethodSet by lazy { hashSetOf("stepAllViews", "onInitilizeView") }
 
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
@@ -189,7 +191,6 @@ class ButterActionDelegate(
             //stepView impl
             val parameterList = this.anchorMethod?.parameterList?.parameters
             val para = if (parameterList?.size == 0) "" else parameterList?.get(0)?.name
-            log(" para = ${parameterList?.get(0)}")
             val callBindViewsState = elementFactory.createStatementFromText("__bindViews($para);\n", this.psiClass)
             anchorStatement =
                 anchorMethod?.addAfter(callBindViewsState, anchorStatement) as? PsiStatement
@@ -240,7 +241,10 @@ class ButterActionDelegate(
     private fun findOnCreateView(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
         val pair = findStatement(psiClass) {
             it.firstChild.text.trim().contains("super.onCreateView(")||
-                    it.text.trim().contains("stepAllViews")
+                    //第一行名字包含
+                    mMatchMethodSet.contains(it.firstChild.text.trim()) ||
+                    //当前方法名
+                    mMatchMethodSet.contains(it.text.trim())
         }
         if (pair.second != null) {
             butterknifeView = "view"
@@ -372,7 +376,6 @@ class ButterActionDelegate(
     private fun findStatement(psiClass: PsiClass, predicate: Predicate<PsiStatement>): Pair<PsiMethod?, PsiStatement?> {
         var bindState: PsiStatement? = null
         val bindMethod = psiClass.methods.find { psiMethod ->
-            log("psiMethod $psiMethod")
             bindState = psiMethod.body?.statements?.find { psiStatement ->
                 predicate.test(psiStatement)
             }
@@ -392,11 +395,8 @@ class ButterActionDelegate(
         psiFields.forEach {
             it.annotations.forEach { psiAnnotation: PsiAnnotation ->
                 // 记录这个psiField, 将BindView注解删掉
-                log("注解名称 = ${psiAnnotation.qualifiedName}, with")
                 if (psiAnnotation.qualifiedName?.contains("BindView") == true) {
-                    log("R.id.view value = " + psiAnnotation.findAttributeValue("value")?.text.orEmpty())
                     val R_id_view = psiAnnotation.findAttributeValue("value")?.text?.replace("R2", "R")
-                    log("R_id_view = $R_id_view")
                     if (R_id_view != null) {
                         knifeFields[R_id_view] = it
                         bindViewAnnotations.add(psiAnnotation)
@@ -558,8 +558,7 @@ class ButterActionDelegate(
             if (bindClickVos.isNotEmpty() || bindViewFields.isNotEmpty()) {
                 val pair = findAnchors(it)
                 if (pair.second == null || pair.first == null) {
-                    Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在内部类${it.name}找到合适的代码插入位置，跳过")
-                    Logger.error("${anchorMethod}, $anchorStatement should not be null!")
+                    Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在内部类${it.name}找到合适的代码插入位置，跳过 with pair${pair}")
                 } else {
                     anchorMethod = pair.first
                     anchorStatement = pair.second
