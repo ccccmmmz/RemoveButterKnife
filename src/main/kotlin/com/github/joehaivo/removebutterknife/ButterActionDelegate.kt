@@ -272,7 +272,8 @@ class ButterActionDelegate(
                 psiClass
             )
             writeAction{
-                pair.first?.addBefore(convertButterBindView, theBindState)
+                //todo testList
+                pair.first?.add(convertButterBindView)
             }
             butterknifeView = "refactorView";
 
