@@ -58,8 +58,7 @@ class ButterActionDelegate(
             val pair = findAnchors(psiClass)
             if (pair.second == null || pair.first == null) {
 //            targetInsertFindViewPair = genOverrideOnCreate()
-                Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过")
-                Logger.error("${anchorMethod}, $anchorStatement should not be null!")
+                Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过 pair = $pair")
             } else {
                 anchorMethod = pair.first
                 anchorStatement = pair.second
