@@ -6,7 +6,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.ui.DialogBuilder
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiFile
@@ -72,17 +71,18 @@ class Entrance(private val e: AnActionEvent) {
     }
 
     fun showDialogWhenBatch(nextAction: (isContinue: Boolean) -> Unit) {
-        val dialogBuilder = DialogBuilder()
-        dialogBuilder.setErrorText("你正在批量处理Java文件，总数$javaFileCount, 可能需要较长时间，是否继续？")
-        dialogBuilder.setOkOperation {
-            nextAction.invoke(true)
-            dialogBuilder.dialogWrapper.close(0)
-        }
-        dialogBuilder.setCancelOperation {
-            nextAction.invoke(false)
-            dialogBuilder.dialogWrapper.close(0)
-        }
-        dialogBuilder.showModal(true)
+//        val dialogBuilder = DialogBuilder()
+//        dialogBuilder.setErrorText("你正在批量处理Java文件，总数$javaFileCount, 可能需要较长时间，是否继续？")
+//        dialogBuilder.setOkOperation {
+//            nextAction.invoke(true)
+//            dialogBuilder.dialogWrapper.close(0)
+//        }
+//        dialogBuilder.setCancelOperation {
+//            nextAction.invoke(false)
+//            dialogBuilder.dialogWrapper.close(0)
+//        }
+//        dialogBuilder.showModal(true)
+        nextAction.invoke(true)
     }
 
     private fun showResult() {
@@ -93,9 +93,9 @@ class Entrance(private val e: AnActionEvent) {
     }
 
     private fun handle(it: VirtualFile) {
-        if (it.isDirectory) {
+        if (it.isDirectory && !mIgnoreDirectorySet.contains(it.name)) {
             handleDirectory(it)
-        } else {
+        } else if (!it.isDirectory){
             if (it.fileType is JavaFileType || it.fileType.name == "Kotlin") {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
                 if (psiFile is PsiJavaFile) {
@@ -104,8 +104,9 @@ class Entrance(private val e: AnActionEvent) {
 
                     handleSingleVirtualFile(it, psiFile, psiClass)
                 } else if (psiFile is KtFile){
-                    val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, KtClass::class.java)
-                    handleSingleVirtualFile(it, psiFile, psiClass)
+                    //ignore ktFile
+                    //val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, KtClass::class.java)
+                    //handleSingleVirtualFile(it, psiFile, psiClass)
                 }
             }
         }
@@ -128,15 +129,15 @@ class Entrance(private val e: AnActionEvent) {
                     val parsed = ButterActionDelegate(e, psiFile, psiClass).parse()
                     if (parsed) {
                         parsedFileCount++
-                        Notifier.notifyInfo(e.project!!, "$currFileIndex. ${vJavaFile.name} 处理结束 √ ")
+                        //Notifier.notifyInfo(e.project!!, "$currFileIndex. ${vJavaFile.name} 处理结束 √ ")
                     } else {
-                        Notifier.notifyInfo(e.project!!, "$currFileIndex. ${vJavaFile.name}没有找到butterknife的相关引用，不处理 - ")
+                        //Notifier.notifyInfo(e.project!!, "$currFileIndex. ${vJavaFile.name}没有找到butterknife的相关引用，不处理 - ")
                     }
                 }
             } catch (t: Throwable) {
                 t.printStackTrace()
                 exceptionFileCount++
-                Notifier.notifyError(e.project!!, "$currFileIndex. ${vJavaFile.name} 处理结束 × ")
+                Notifier.notifyError(e.project!!, "$currFileIndex. ${vJavaFile.name} 处理结束 × with exception ${t.message}")
             }
         }
     }
@@ -184,6 +185,9 @@ class Entrance(private val e: AnActionEvent) {
                 count(it)
             }
         } else if (!it.isDirectory){
+            if (javaFileCount > 1){
+                return
+            }
             if (it.fileType is JavaFileType) {
                 val psiFile = PsiManager.getInstance(e.project!!).findFile(it)
                 val psiClass = PsiTreeUtil.findChildOfAnyType(psiFile, PsiClass::class.java)

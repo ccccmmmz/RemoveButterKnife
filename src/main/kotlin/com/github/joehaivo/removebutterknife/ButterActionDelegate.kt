@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.*
+import com.intellij.psi.impl.source.tree.java.PsiCodeBlockImpl
 import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
@@ -30,7 +31,7 @@ class ButterActionDelegate(
     /**
      * 代码插入所在的锚点语句 // eg: Butterknife.bind() | super.onCreate() | 内部类的super(view)
      */
-    private var anchorStatement: PsiStatement? = null
+    private var anchorStatement: PsiElement? = null
 
     /**
      * unbinder = Butterknife.bind(this, view)表达式中的参数view
@@ -56,8 +57,7 @@ class ButterActionDelegate(
         val (bindClickVos, onClickAnnotations) = collectOnClickAnnotation(psiClass)
         if (bindClickVos.isNotEmpty() || bindViewFields.isNotEmpty()) {
             val pair = findAnchors(psiClass)
-            if (pair.second == null || pair.first == null) {
-//            targetInsertFindViewPair = genOverrideOnCreate()
+            if (pair.first == null) {
                 Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过 pair = $pair")
             } else {
                 anchorMethod = pair.first
@@ -140,6 +140,13 @@ class ButterActionDelegate(
     // 寻找代码插入的锚点：例如onCreate()方法以及内部ButterKnife.bind()语句
     private fun findAnchors(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
         var pair = findButterKnifeBind(psiClass)
+        if (pair.second == null){
+            pair = findCustomProjectImpl(psiClass)
+            if (pair.first != null) {
+                return pair
+            }
+
+        }
         if (pair.second == null) {
             pair = findOnCreateView(psiClass)
         }
@@ -159,6 +166,19 @@ class ButterActionDelegate(
             pair = createOnCreateViewMethodInFragment(psiClass)
         }
         return pair
+    }
+
+    private fun findCustomProjectImpl(psiClass: PsiClass) : Pair<PsiMethod?, PsiStatement?>{
+        val bindMethod = psiClass.methods.find {
+            mMatchMethodSet.contains(it.name)
+        } ?: return Pair(null, null)
+        butterknifeView = "root"
+
+
+        val size = bindMethod.body?.statements?.size
+        return Pair(bindMethod, if (size != 0) bindMethod.body?.statements?.get(0) else {
+            bindMethod.firstChild as? PsiStatement
+        })
     }
 
     private fun insertBindViewsMethod(
@@ -189,10 +209,21 @@ class ButterActionDelegate(
             // 将__bindViews();调用插入到anchorMethod里anchorStatement之后
             //stepView impl
             val parameterList = this.anchorMethod?.parameterList?.parameters
-            val para = if (parameterList?.size == 0) "" else parameterList?.get(0)?.name
+            val para = if (butterknifeView.isNullOrEmpty()) {
+                if (parameterList?.size == 0) "" else parameterList?.get(0)?.name
+            } else butterknifeView
+
             val callBindViewsState = elementFactory.createStatementFromText("__bindViews($para);\n", this.psiClass)
+            if (anchorStatement == null) {
+                anchorStatement = anchorMethod?.lastChild
+                if (anchorStatement is PsiCodeBlockImpl) {
+                    anchorStatement = (anchorStatement as PsiCodeBlockImpl).firstBodyElement
+                }
+            }
+
             anchorStatement =
                 anchorMethod?.addAfter(callBindViewsState, anchorStatement) as? PsiStatement
+
             bindViewAnnotations.forEach {
                 it.delete()
             }
@@ -233,17 +264,26 @@ class ButterActionDelegate(
                 butterknifeView = bindMethodCall.argumentList.expressions.lastOrNull()?.text
             }
         }
+
+        //butterknifeView 如果是findView出来或者其他转化出来的 转化成field
+        if (butterknifeView?.contains(".") == true){
+            val convertButterBindView = elementFactory.createStatementFromText(
+                "View refactorView = $butterknifeView;",
+                psiClass
+            )
+            writeAction{
+                pair.first?.addAfter(convertButterBindView, theBindState)
+            }
+            butterknifeView = "refactorView";
+
+        }
         return pair
     }
 
     // 找到`super.onCreateView(`语句及所在方法
     private fun findOnCreateView(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
         val pair = findStatement(psiClass) {
-            it.firstChild.text.trim().contains("super.onCreateView(")||
-                    //第一行名字包含
-                    mMatchMethodSet.contains(it.firstChild.text.trim()) ||
-                    //当前方法名
-                    mMatchMethodSet.contains(it.text.trim())
+            it.firstChild.text.trim().contains("super.onCreateView(")
         }
         if (pair.second != null) {
             butterknifeView = "view"
@@ -299,6 +339,7 @@ class ButterActionDelegate(
     }
 
     private fun findConstructorAsAnchor(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
+        log("findConstructorAsAnchor -1")
         var pair: Pair<PsiMethod?, PsiStatement?> = Pair(null, null)
         if (!ArrayUtil.isEmpty(psiClass.constructors)) {
             val targetConstructor = psiClass.constructors.find {
@@ -310,7 +351,10 @@ class ButterActionDelegate(
                 }
                 pView != null
             }
+            log("findConstructorAsAnchor -2")
+            pair = Pair(targetConstructor, null)
             if (!ArrayUtil.isEmpty(targetConstructor?.body?.statements)) {
+                log("findConstructorAsAnchor -3")
                 pair = Pair(targetConstructor, targetConstructor?.body?.statements?.get(0)!!)
             }
         }
@@ -427,8 +471,9 @@ class ButterActionDelegate(
             }
             importMyDebouncingListenerIfAbsent()
             onClickVOs.forEach {
+                //lambda 转化
                 val setClickState = elementFactory.createStatementFromText(
-                    "${caller}findViewById(${it.viewId}).setOnClickListener((DebouncingOnClickListener) ${it.lambdaParam} -> ${it.callMethodExpr});",
+                    "${caller}findViewById(${it.viewId}).setOnClickListener(this::${it.callMethodExpr.subSequence(0, it.callMethodExpr.indexOf("("))});",
                     psiClass
                 )
                 bindClickMethod.lastChild.add(setClickState)
