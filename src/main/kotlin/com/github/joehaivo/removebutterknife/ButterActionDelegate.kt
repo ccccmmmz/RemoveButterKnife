@@ -272,8 +272,12 @@ class ButterActionDelegate(
                 psiClass
             )
             writeAction{
-                //todo testList
-                pair.first?.add(convertButterBindView)
+                //todo 检查view导包
+                /**
+                 * 当前插入代码 View refactorView = $butterknifeView;
+                 * 如果当前导包缺少 需要补View的导包
+                 */
+                pair.first?.addBefore(convertButterBindView, pair.second)
             }
             butterknifeView = "refactorView";
 
