@@ -47,6 +47,11 @@ class ButterActionDelegate(
 
     private val mMatchMethodSet by lazy { hashSetOf("stepAllViews", "onInitilizeView") }
 
+    /**
+     * view import
+     */
+    private val mViewImportState = "import android.view.View;"
+
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
             return false
@@ -278,11 +283,27 @@ class ButterActionDelegate(
                  * 如果当前导包缺少 需要补View的导包
                  */
                 pair.first?.addBefore(convertButterBindView, pair.second)
+                insertViewImportIfAbsent(psiClass)
             }
             butterknifeView = "refactorView";
 
         }
         return pair
+    }
+
+
+    private fun insertViewImportIfAbsent(psiClass: PsiClass){
+        val findViewImport = psiJavaFile.importList?.importStatements?.find {
+            it.text.equals("android.view.View")
+        }
+        if (findViewImport == null) {
+            log("没有view 导包")
+            val lastChild = psiJavaFile.importList?.lastChild
+            psiJavaFile.importList?.addAfter(elementFactory.createStatementFromText(mViewImportState, psiClass), lastChild)
+
+        } else {
+            log("有view导包")
+        }
     }
 
     // 找到`super.onCreateView(`语句及所在方法
