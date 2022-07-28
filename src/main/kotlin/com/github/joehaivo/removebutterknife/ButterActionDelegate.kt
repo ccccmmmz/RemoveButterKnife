@@ -50,7 +50,7 @@ class ButterActionDelegate(
     /**
      * view import
      */
-    private val mViewImportState = "import android.view.View;"
+    private val mViewImportState = "android.view"
 
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
@@ -297,12 +297,15 @@ class ButterActionDelegate(
             it.text.equals("android.view.View")
         }
         if (findViewImport == null) {
-            log("没有view 导包")
             val lastChild = psiJavaFile.importList?.lastChild
-            psiJavaFile.importList?.addAfter(elementFactory.createStatementFromText(mViewImportState, psiClass), lastChild)
+            val importElement =
+                elementFactory.createImportStatementOnDemand(mViewImportState)
+            //导入import android.view.*
+            //log("importElement = $importElement, is psistate = ${importElement is PsiStatement == true}")
+            psiJavaFile.importList?.addAfter(importElement, lastChild)
 
         } else {
-            log("有view导包")
+            //没有view导包
         }
     }
 
@@ -583,7 +586,11 @@ class ButterActionDelegate(
     }
 
     private fun writeAction(commandName: String = "RemoveButterknifeWriteAction", runnable: Runnable) {
-        WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
+        try {
+            WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
+        } catch (e: Exception) {
+            log(e.message.orEmpty())
+        }
 //        ApplicationManager.getApplication().runWriteAction(runnable)
     }
 
