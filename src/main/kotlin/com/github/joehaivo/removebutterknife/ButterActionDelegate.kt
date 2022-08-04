@@ -14,6 +14,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.util.ArrayUtil
 import org.jetbrains.kotlin.idea.util.ifTrue
+import org.jetbrains.kotlin.psi.psiUtil.getChildrenOfType
 import java.util.function.Predicate
 
 
@@ -43,7 +44,7 @@ class ButterActionDelegate(
     /**
      * unbinder = Butterknife.bind(this, view) | Butterknife.bind(this, view) | Butterknife.bind(this)
      */
-    private var butterknifeBindStatement: PsiStatement? = null
+    private var butterknifeBindStatement: PsiElement? = null
 
     private var deBouncingClass: PsiClass? = null
 
@@ -55,6 +56,8 @@ class ButterActionDelegate(
     private val mViewImportState = "android.view.View"
 
     private var mImportAndroidViewElement : PsiStatement? = null
+
+    private val mButterKnifeBindEntry = "ButterKnife.bind("
 
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
@@ -105,17 +108,48 @@ class ButterActionDelegate(
             } catch (t: Throwable) {
                 t.printStackTrace()
             }
+            //基类只有ButterKnife.bind情况
             // 再找一遍是否存在"ButterKnife.bind("
-            val bindStates = mutableListOf<PsiStatement?>()
+            /**
+             * deleteButterKnifeStatement methods= PsiMethod:onCreateView , statement = PsiIfStatement, statement content = if (0 != getFragLayoutId()) {
+                View view = inflater.inflate(getFragLayoutId(), container, false);
+                mRootView = new AutoSpeedFrameLayout(view.getContext()).wrap(view, new PageDrawImpl());
+                ButterKnife.bind(this, mRootView);
+                mContainerView.addView(mRootView);
+                 }
+             */
+
+            val bindStates = mutableListOf<PsiElement>()
+
             psiClass.methods.forEach {
-                val list = it.body?.statements?.filter { st ->
-                    st.firstChild.text.trim().contains("ButterKnife.bind(")
+                if (it.name.contains("onCreateView")) {
+                    val ifStateArray = it.body?.getChildrenOfType<PsiIfStatement>()
+                    if (ifStateArray.isNullOrEmpty().not()) {
+
+                        ifStateArray?.forEach {
+                            val lastChild = it.lastChild
+                            if (lastChild is PsiBlockStatement) {
+                                val expressionArray = lastChild.codeBlock.getChildrenOfType<PsiExpressionStatement>()
+                                if (expressionArray.isNotEmpty()) {
+                                    val psiExpressionStatement = expressionArray.first {
+                                        it.text.startsWith(mButterKnifeBindEntry)
+                                    }
+                                    if (psiExpressionStatement != null) {
+                                        bindStates.add(psiExpressionStatement)
+                                        log(" 找到bind ${it.text}")
+                                    }
+
+                                }
+                            }
+                        }
+                    }
                 }
-                if (list != null) {
-                    bindStates.addAll(list)
-                }
+
+
             }
-            bindStates.forEach { it?.delete() }
+
+
+            bindStates.forEach { it.delete() }
 
             // unbinderField: private Unbinder bind;
             val unbinderField = psiClass.fields.find {
@@ -150,7 +184,7 @@ class ButterActionDelegate(
     }
 
     // 寻找代码插入的锚点：例如onCreate()方法以及内部ButterKnife.bind()语句
-    private fun findAnchors(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
+    private fun findAnchors(psiClass: PsiClass): Pair<PsiMethod?, PsiElement?> {
         var pair = findButterKnifeBind(psiClass)
         if (pair.second == null){
             pair = findCustomProjectImpl(psiClass)
