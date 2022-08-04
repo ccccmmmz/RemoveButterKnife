@@ -2,6 +2,7 @@ package com.github.joehaivo.removebutterknife
 
 import com.github.joehaivo.removebutterknife.utils.Logger
 import com.github.joehaivo.removebutterknife.utils.Notifier
+import com.github.joehaivo.removebutterknife.utils.PluginCompanion
 import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.runWriteAction
@@ -12,6 +13,7 @@ import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.util.ArrayUtil
+import org.jetbrains.kotlin.idea.util.ifTrue
 import java.util.function.Predicate
 
 
@@ -50,13 +52,15 @@ class ButterActionDelegate(
     /**
      * view import
      */
-    private val mViewImportState = "android.view"
+    private val mViewImportState = "android.view.View"
+
+    private var mImportAndroidViewElement : PsiStatement? = null
 
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
             return false
         }
-        replaceDebouncingOnClickListener()
+        //replaceDebouncingOnClickListener()
 
         val (bindViewFields, bindViewAnnotations) = collectBindViewAnnotation(psiClass.fields)
         val (bindClickVos, onClickAnnotations) = collectOnClickAnnotation(psiClass)
@@ -83,6 +87,9 @@ class ButterActionDelegate(
 
     private fun checkIsNeedModify(): Boolean {
         val importStatement = psiJavaFile.importList?.importStatements?.find {
+            it.qualifiedName?.contains(mViewImportState)?.ifTrue {
+                PluginCompanion.onMatchImport(it)
+            }
             it.qualifiedName?.toLowerCase()?.contains("butterknife") == true
         }
         return importStatement != null
@@ -258,8 +265,13 @@ class ButterActionDelegate(
         val theBindState = butterknifeBindStatement?.firstChild
         // 针对内部类的, firstChild: ButterKnife.bind(this，itemView)
         if (theBindState is PsiMethodCallExpression) {
-            if (theBindState.argumentList.expressionCount == 2) {
+            //ButterKnife.bind(View)
+            if (theBindState.argumentList.expressionCount >= 1) {
                 butterknifeView = theBindState.argumentList.expressions.lastOrNull()?.text
+                ////ButterKnife.bind(this)
+                if (butterknifeView == "this") {
+                    butterknifeView = ""
+                }
             }
         }
         // firstChild: unbinder = ButterKnife.bind(this, view)
@@ -300,12 +312,14 @@ class ButterActionDelegate(
             val lastChild = psiJavaFile.importList?.lastChild
             val importElement =
                 elementFactory.createImportStatementOnDemand(mViewImportState)
-            //导入import android.view.*
+//            导入import android.view.*
             //log("importElement = $importElement, is psistate = ${importElement is PsiStatement == true}")
-            psiJavaFile.importList?.addAfter(importElement, lastChild)
+
+            log("插入 $mViewImportState 时 ${PluginCompanion.mImportViewStatement}")
+            psiJavaFile.importList?.addAfter(PluginCompanion.mImportViewStatement?: return, lastChild)
 
         } else {
-            //没有view导包
+            //有view导包
         }
     }
 
@@ -368,7 +382,6 @@ class ButterActionDelegate(
     }
 
     private fun findConstructorAsAnchor(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
-        log("findConstructorAsAnchor -1")
         var pair: Pair<PsiMethod?, PsiStatement?> = Pair(null, null)
         if (!ArrayUtil.isEmpty(psiClass.constructors)) {
             val targetConstructor = psiClass.constructors.find {
@@ -380,10 +393,8 @@ class ButterActionDelegate(
                 }
                 pView != null
             }
-            log("findConstructorAsAnchor -2")
             pair = Pair(targetConstructor, null)
             if (!ArrayUtil.isEmpty(targetConstructor?.body?.statements)) {
-                log("findConstructorAsAnchor -3")
                 pair = Pair(targetConstructor, targetConstructor?.body?.statements?.get(0)!!)
             }
         }
@@ -594,6 +605,7 @@ class ButterActionDelegate(
 //        ApplicationManager.getApplication().runWriteAction(runnable)
     }
 
+    @Deprecated("用lambda替换 省去onClick的导包")
     private fun replaceDebouncingOnClickListener() {
         if (deBouncingClass == null) {
             val fullClassName = "DebouncingOnClickListener"
