@@ -85,7 +85,7 @@ class ButterActionDelegate(
         }
 
         //没有找到锚点暂时不删除相关
-        if (needInterrupt) {
+        if (!needInterrupt) {
             deleteButterKnifeStatement(psiClass)
             deleteImportButterKnife()
 
@@ -307,9 +307,11 @@ class ButterActionDelegate(
     // 找到`ButterKnife.bind(`语句及所在方法
     private fun findButterKnifeBind(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
 
-        val pair : Pair<PsiMethod?, PsiStatement?>
+        var pair : Pair<PsiMethod?, PsiStatement?>
         var anchorMethod : PsiMethod? = null
         var anchorState : PsiStatement? = null
+        //anchorState 所处的 if代码块 用于判断回滚
+        var anchorIfState : PsiStatement? = null
 
 
         /**
@@ -352,6 +354,8 @@ class ButterActionDelegate(
                             if (psiExpressionStatement != null) {
                                 anchorMethod = it
                                 anchorState = psiExpressionStatement
+                                anchorIfState = statement
+                                log("插入代码可能有风险---${psiJavaFile.name}")
                             }
 
                         }
@@ -374,6 +378,19 @@ class ButterActionDelegate(
                 ////ButterKnife.bind(this)
                 if (butterknifeView == "this") {
                     butterknifeView = ""
+                }
+            }
+
+            //查找if条件判断内容
+            val binaryExpressions = anchorIfState?.getChildrenOfType<PsiBinaryExpression>()
+            if (binaryExpressions.isNullOrEmpty()) {
+                //不存在
+            } else {
+                binaryExpressions.forEach {
+                    if (it.lOperand.text.contains(butterknifeView.orEmpty()) || it.rOperand?.text?.contains(butterknifeView.orEmpty()) == true) {
+                        //butterknifeView 作为判断条件的话将anchor放在if代码块后边
+                        pair = Pair(anchorMethod, anchorIfState)
+                    }
                 }
             }
         }
