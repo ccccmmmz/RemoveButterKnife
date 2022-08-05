@@ -21,10 +21,8 @@
 ### 2. 插件的主要功能
 
 - 将`@BindView(id)`注解转换成`findViewById(id)`
-- 将`@OnClick(id)`注解转换成`setOnClickListener()`
+- 将`@OnClick(id)`注解转换成`java8形式的Lambda __bindClicks()`
 - 在合适的位置插入`__bindClicks()`和`__bindViews()`
-
-- 替换`butterknife.internal.DebouncingOnClickListener`为自己定义的
 
 ### 3. 安装
 
@@ -34,7 +32,8 @@
 
 ### 4. 使用
 
->  **使用之前, 需要先把`butterknife.internal.DebouncingOnClickListener`类单独拷贝一份出来修改包名后放在项目中, 新的包名不能再包含`butterknife`, 类名不要改, 例如`com.example.biz.DebouncingOnClickListener`**
+>  ** 文件中存在ButterKnife.bind代码已经准确获取锚点,无需关注
+>  ** 如果是基类中ButterKnife.bind子类中使用则需要编辑ButterActionDelegate#mMatchMethodSet加入项目的方法作为匹配
 
 - 单独处理: 在需要处理的`Java`文件上右键，在展开的菜单底部找到"RemoveButterKnife"点击.
 - 批量处理整个文件夹: 在需要处理的`文件夹`上右键，找到"RemoveButterKnife"点击.
