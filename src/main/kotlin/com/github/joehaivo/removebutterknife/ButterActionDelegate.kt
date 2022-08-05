@@ -294,8 +294,7 @@ class ButterActionDelegate(
         val pair : Pair<PsiMethod?, PsiStatement?>
         var anchorMethod : PsiMethod? = null
         var anchorState : PsiStatement? = null
-        log("findButterKnifeBind enter")
-        psiClass.methods.forEach {
+        psiClass.methods.forEach { it ->
             val ifStateArray = it.body?.getChildrenOfType<PsiIfStatement>()
             if (ifStateArray.isNullOrEmpty().not()) {
                 ifStateArray?.forEach { statement ->
@@ -303,7 +302,7 @@ class ButterActionDelegate(
                     if (lastChild is PsiBlockStatement) {
                         val expressionArray = lastChild.codeBlock.getChildrenOfType<PsiExpressionStatement>()
                         if (expressionArray.isNotEmpty()) {
-                            val psiExpressionStatement = expressionArray.first {
+                            val psiExpressionStatement = expressionArray.find {
                                 it.text.startsWith(mButterKnifeBindEntry)
                             }
                             if (psiExpressionStatement != null) {

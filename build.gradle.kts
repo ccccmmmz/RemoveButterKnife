@@ -1,5 +1,3 @@
-import java.net.URI
-
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "1.6.20"
@@ -7,8 +5,7 @@ plugins {
 }
 
 group = "com.github.joehaivo"
-version = "1.0.3"
-
+version = "1.4.21"
 repositories {
     mavenCentral()
     google()
@@ -16,10 +13,11 @@ repositories {
 
 // Configure Gradle IntelliJ Plugin - read more: https://github.com/JetBrains/gradle-intellij-plugin
 intellij {
-    version.set("2021.2")
-    type.set("IU") // Target IDE Platform
+//    version.set("2021.2")
+//    type.set("IU") // Target IDE Platform
     //Target IDE Platform install path
 //    localPath.set("/Users/ligen/Applications/JetBrains Toolbox/IntelliJ IDEA Ultimate.app/Contents")
+    localPath.set("D:\\Program Files\\toolsbox\\apps\\AndroidStudio\\ch-0\\212.5712.43.2112.8609683")
     plugins.set(
         listOf(
             "Kotlin",
@@ -35,6 +33,7 @@ intellij {
 
 dependencies {
 //    compileOnly("com.github.adedayo.intellij.sdk:dom-openapi:142.1")
+    implementation(kotlin("gradle-plugin", "1.6.20"))
 }
 
 tasks {
