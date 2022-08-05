@@ -7,14 +7,17 @@ import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.project.Project
 import com.intellij.psi.*
 import com.intellij.psi.impl.source.tree.java.PsiCodeBlockImpl
 import com.intellij.psi.impl.source.tree.java.PsiReferenceExpressionImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.util.ArrayUtil
+import org.apache.http.util.TextUtils
 import org.jetbrains.kotlin.idea.util.ifTrue
 import org.jetbrains.kotlin.psi.psiUtil.getChildrenOfType
+import java.util.*
 import java.util.function.Predicate
 
 
@@ -67,9 +70,11 @@ class ButterActionDelegate(
 
         val (bindViewFields, bindViewAnnotations) = collectBindViewAnnotation(psiClass.fields)
         val (bindClickVos, onClickAnnotations) = collectOnClickAnnotation(psiClass)
+        var needInterrupt = false
         if (bindClickVos.isNotEmpty() || bindViewFields.isNotEmpty()) {
             val pair = findAnchors(psiClass)
             if (pair.first == null) {
+                needInterrupt = true
                 Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过 pair = $pair")
             } else {
                 anchorMethod = pair.first
@@ -79,10 +84,12 @@ class ButterActionDelegate(
             }
         }
 
-        deleteButterKnifeStatement(psiClass)
+        //没有找到锚点暂时不删除相关
+        if (needInterrupt) {
+            deleteButterKnifeStatement(psiClass)
+            deleteImportButterKnife()
 
-        deleteImportButterKnife()
-
+        }
         // 内部类
         handleInnerClass(psiClass.innerClasses)
         return true
@@ -96,6 +103,25 @@ class ButterActionDelegate(
             it.qualifiedName?.toLowerCase()?.contains("butterknife") == true
         }
         return importStatement != null
+    }
+
+    private fun writeImport(importContent: String){
+        if (TextUtils.isEmpty(importContent)) {
+            return
+        }
+        writeAction{
+
+            val clazz = findClazz(project, importContent)
+            if (clazz.isPresent) {
+                psiJavaFile.importList?.add(elementFactory.createImportStatement(clazz.get()))
+            } else {
+                //找不到
+                elementFactory.createImportStatementOnDemand(importContent).apply {
+                    psiJavaFile.importList?.add(this)
+                }
+            }
+
+        }
     }
 
     private fun deleteButterKnifeStatement(psiClass: PsiClass) {
@@ -120,34 +146,8 @@ class ButterActionDelegate(
              */
 
             val bindStates = mutableListOf<PsiElement>()
-
-            psiClass.methods.forEach {
-                if (it.name.contains("onCreateView")) {
-                    val ifStateArray = it.body?.getChildrenOfType<PsiIfStatement>()
-                    if (ifStateArray.isNullOrEmpty().not()) {
-
-                        ifStateArray?.forEach {
-                            val lastChild = it.lastChild
-                            if (lastChild is PsiBlockStatement) {
-                                val expressionArray = lastChild.codeBlock.getChildrenOfType<PsiExpressionStatement>()
-                                if (expressionArray.isNotEmpty()) {
-                                    val psiExpressionStatement = expressionArray.first {
-                                        it.text.startsWith(mButterKnifeBindEntry)
-                                    }
-                                    if (psiExpressionStatement != null) {
-                                        bindStates.add(psiExpressionStatement)
-                                        log(" 找到bind ${it.text}")
-                                    }
-
-                                }
-                            }
-                        }
-                    }
-                }
-
-
-            }
-
+            val findButterKnifeBind = findButterKnifeBind(psiClass)
+            findButterKnifeBind.second.takeIf { it != null }.let { bindStates.add(it!!) }
 
             bindStates.forEach { it.delete() }
 
@@ -279,14 +279,30 @@ class ButterActionDelegate(
 
     // 删除import butterKnife.*语句
     private fun deleteImportButterKnife() {
+        var packageName = ""
         psiJavaFile.importList?.importStatements?.filter {
-            it.qualifiedName?.contains("butterknife") == true
+            it.qualifiedName?.contains("butterknife") == true ||
+                    it.qualifiedName?.contains(".R2") == true
+
         }?.forEach { importStatement ->
+            importStatement.qualifiedName?.contains(".R2")?.ifTrue {
+                packageName = importStatement.qualifiedName.orEmpty().replace(".R2", "")
+            }
             writeAction {
                 importStatement.delete()
             }
         }
+        val psiImportStatement = psiJavaFile.importList?.importStatements?.find {
+            it.qualifiedName?.contains(".R") == true
+        }
+
+        //不存在R导包 找到报名
+        if (psiImportStatement == null) {
+            writeImport(packageName)
+        }
+
     }
+
 
     // 找到`ButterKnife.bind(`语句及所在方法
     private fun findButterKnifeBind(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
@@ -294,7 +310,35 @@ class ButterActionDelegate(
         val pair : Pair<PsiMethod?, PsiStatement?>
         var anchorMethod : PsiMethod? = null
         var anchorState : PsiStatement? = null
+
+
+        /**
+         * 直接从方法中找anchor
+         * 1 anchor在if代码块中
+         * 2 anchor不在if代码块中
+         * 3 不存在if代码块
+         */
         psiClass.methods.forEach { it ->
+            //方法体中没有if代码块
+            //直接找bind的PsiExpressionStatement
+            val expressionArray = it.body?.getChildrenOfType<PsiExpressionStatement>()
+            if (expressionArray?.isNotEmpty() == true) {
+                val psiExpressionStatement = expressionArray.find {
+                    it.text.startsWith(mButterKnifeBindEntry)
+                }
+                if (psiExpressionStatement != null) {
+                    anchorMethod = it
+                    anchorState = psiExpressionStatement
+                }
+
+            }
+
+            if (anchorMethod != null){
+                //已经找到anchor
+                return@forEach
+            }
+            //if body快中含有bind操作
+            //if 判断语句中条件跟bind的参数正好一直则放在if条件之后,并输出
             val ifStateArray = it.body?.getChildrenOfType<PsiIfStatement>()
             if (ifStateArray.isNullOrEmpty().not()) {
                 ifStateArray?.forEach { statement ->
@@ -316,7 +360,6 @@ class ButterActionDelegate(
             }
         }
         pair = Pair(anchorMethod, anchorState)
-        log("findButterKnifeBind enter 1 with $pair")
 
         if (pair.second != null) {
             butterknifeBindStatement = pair.second
@@ -369,15 +412,16 @@ class ButterActionDelegate(
             it.text.equals("android.view.View")
         }
         if (findViewImport == null) {
-            val lastChild = psiJavaFile.importList?.lastChild
-            val importElement =
-                elementFactory.createImportStatementOnDemand(mViewImportState)
-//            导入import android.view.*
-            //log("importElement = $importElement, is psistate = ${importElement is PsiStatement == true}")
-
-            log("插入 $mViewImportState 时 ${PluginCompanion.mImportViewStatement}")
-            psiJavaFile.importList?.addAfter(PluginCompanion.mImportViewStatement?: return, lastChild)
-
+//            val lastChild = psiJavaFile.importList?.lastChild
+//            val importElement =
+//                elementFactory.createImportStatementOnDemand(mViewImportState)
+////            导入import android.view.*
+//            //log("importElement = $importElement, is psistate = ${importElement is PsiStatement == true}")
+//
+//            //log("插入 $mViewImportState 时 ${PluginCompanion.mImportViewStatement}")
+//
+//            psiJavaFile.importList?.addAfter(PluginCompanion.mImportViewStatement?: return, lastChild)
+            writeImport(mViewImportState)
         } else {
             //有view导包
         }
@@ -656,12 +700,20 @@ class ButterActionDelegate(
         }
     }
 
+    private fun findClazz(project: Project?,  clazzName: String?): Optional<PsiClass> {
+        //找到一个类
+        return Optional.ofNullable(
+            JavaPsiFacade.getInstance(project!!).findClass(clazzName!!, GlobalSearchScope.allScope(project))
+        )
+    }
+
+
     private fun writeAction(commandName: String = "RemoveButterknifeWriteAction", runnable: Runnable) {
         try {
             WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
         } catch (e: Exception) {
             e.printStackTrace()
-            log(e.message.orEmpty())
+            //log(e.message.orEmpty())
         }
 //        ApplicationManager.getApplication().runWriteAction(runnable)
     }
