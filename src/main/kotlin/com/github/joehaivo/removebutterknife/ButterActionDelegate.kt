@@ -186,6 +186,7 @@ class ButterActionDelegate(
     // 寻找代码插入的锚点：例如onCreate()方法以及内部ButterKnife.bind()语句
     private fun findAnchors(psiClass: PsiClass): Pair<PsiMethod?, PsiElement?> {
         var pair = findButterKnifeBind(psiClass)
+
         if (pair.second == null){
             pair = findCustomProjectImpl(psiClass)
             if (pair.first != null) {
@@ -289,9 +290,35 @@ class ButterActionDelegate(
 
     // 找到`ButterKnife.bind(`语句及所在方法
     private fun findButterKnifeBind(psiClass: PsiClass): Pair<PsiMethod?, PsiStatement?> {
-        val pair = findStatement(psiClass) {
-            it.firstChild.text.trim().contains("ButterKnife.bind(")
+
+        val pair : Pair<PsiMethod?, PsiStatement?>
+        var anchorMethod : PsiMethod? = null
+        var anchorState : PsiStatement? = null
+        log("findButterKnifeBind enter")
+        psiClass.methods.forEach {
+            val ifStateArray = it.body?.getChildrenOfType<PsiIfStatement>()
+            if (ifStateArray.isNullOrEmpty().not()) {
+                ifStateArray?.forEach { statement ->
+                    val lastChild = statement.lastChild
+                    if (lastChild is PsiBlockStatement) {
+                        val expressionArray = lastChild.codeBlock.getChildrenOfType<PsiExpressionStatement>()
+                        if (expressionArray.isNotEmpty()) {
+                            val psiExpressionStatement = expressionArray.first {
+                                it.text.startsWith(mButterKnifeBindEntry)
+                            }
+                            if (psiExpressionStatement != null) {
+                                anchorMethod = it
+                                anchorState = psiExpressionStatement
+                            }
+
+                        }
+                    }
+                }
+            }
         }
+        pair = Pair(anchorMethod, anchorState)
+        log("findButterKnifeBind enter 1 with $pair")
+
         if (pair.second != null) {
             butterknifeBindStatement = pair.second
         }
@@ -634,6 +661,7 @@ class ButterActionDelegate(
         try {
             WriteCommandAction.runWriteCommandAction(project, commandName, "RemoveButterknifeGroupID", runnable, psiJavaFile)
         } catch (e: Exception) {
+            e.printStackTrace()
             log(e.message.orEmpty())
         }
 //        ApplicationManager.getApplication().runWriteAction(runnable)
