@@ -1,6 +1,7 @@
 package com.github.joehaivo.removebutterknife
 
 import com.github.joehaivo.removebutterknife.utils.Notifier
+import com.github.joehaivo.removebutterknife.utils.TrackKit
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -86,10 +87,10 @@ class Entrance(private val e: AnActionEvent) {
     }
 
     private fun showResult() {
-        Notifier.notifyInfo(
-            e.project!!,
-            "RemoveButterknife处理结果：${currFileIndex}个Java文件, ${parsedFileCount}个完成, ${exceptionFileCount}个异常"
-        )
+        TrackKit.getModifyLog().forEach {
+            log(it)
+        }
+
     }
 
     private fun handle(it: VirtualFile) {

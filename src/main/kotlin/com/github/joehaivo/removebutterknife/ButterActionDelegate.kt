@@ -3,6 +3,7 @@ package com.github.joehaivo.removebutterknife
 import com.github.joehaivo.removebutterknife.utils.Logger
 import com.github.joehaivo.removebutterknife.utils.Notifier
 import com.github.joehaivo.removebutterknife.utils.PluginCompanion
+import com.github.joehaivo.removebutterknife.utils.TrackKit
 import com.intellij.lang.java.JavaImportOptimizer
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.runWriteAction
@@ -79,9 +80,21 @@ class ButterActionDelegate(
             } else {
                 anchorMethod = pair.first
                 anchorStatement = pair.second
+                /**
+                 * anchorStatement是butterKnife.bind锚点统计类名,不是的话统计类名 方法名
+                 */
+
+                if (anchorStatement?.text?.startsWith(mButterKnifeBindEntry) == true){
+                    TrackKit.modifyAfterButterKnifeBind(psiClass)
+                } else {
+                    TrackKit.trackOtherModify(psiClass, anchorMethod?.name.orEmpty())
+                }
                 insertBindViewsMethod(psiClass, bindViewFields, bindViewAnnotations)
                 insertBindClickMethod(psiClass, bindClickVos, onClickAnnotations)
             }
+        } else {
+            //没有bindView 或者 @OnClick的
+            TrackKit.onDeleteImport(psiClass)
         }
 
         //没有找到锚点暂时不删除相关
@@ -89,6 +102,9 @@ class ButterActionDelegate(
             deleteButterKnifeStatement(psiClass)
             deleteImportButterKnife()
 
+        } else {
+            //有butterKnife相关,但是没删除的
+            TrackKit.onNoDelete(psiClass)
         }
         // 内部类
         handleInnerClass(psiClass.innerClasses)
@@ -100,7 +116,7 @@ class ButterActionDelegate(
             it.qualifiedName?.contains(mViewImportState)?.ifTrue {
                 PluginCompanion.onMatchImport(it)
             }
-            it.qualifiedName?.toLowerCase()?.contains("butterknife") == true
+            it.qualifiedName?.lowercase()?.contains("butterknife") == true
         }
         return importStatement != null
     }
@@ -268,8 +284,20 @@ class ButterActionDelegate(
                 }
             }
 
-            anchorStatement =
+            //插入替换方法 插入到第一个statement之前
+            //判断anchorStatement是否是super语句
+            var anchorSuper = false
+            if (anchorStatement?.text?.startsWith("super.") == true || anchorStatement?.text?.startsWith("super(") == true){
+                anchorSuper = true
+            }
+            anchorStatement = if (anchorSuper) {
+                //插入锚点是super 放之后
                 anchorMethod?.addAfter(callBindViewsState, anchorStatement) as? PsiStatement
+            } else {
+                //不是super 放之前
+                anchorMethod?.addBefore(callBindViewsState, anchorStatement) as? PsiStatement
+            }
+
 
             bindViewAnnotations.forEach {
                 it.delete()
@@ -292,9 +320,11 @@ class ButterActionDelegate(
                 importStatement.delete()
             }
         }
+        //匹配*.R;导包
         val psiImportStatement = psiJavaFile.importList?.importStatements?.find {
-            it.qualifiedName?.contains(".R") == true
+            it.qualifiedName?.contains(".R;") == true
         }
+
 
         //不存在R导包 找到报名
         if (psiImportStatement == null) {
@@ -355,7 +385,7 @@ class ButterActionDelegate(
                                 anchorMethod = it
                                 anchorState = psiExpressionStatement
                                 anchorIfState = statement
-                                log("插入代码可能有风险---${psiJavaFile.name}")
+                                //log("插入代码可能有风险---${psiJavaFile.name}")
                             }
 
                         }
@@ -781,9 +811,17 @@ class ButterActionDelegate(
                 } else {
                     anchorMethod = pair.first
                     anchorStatement = pair.second
+                    //内部类统计
+                    if (anchorStatement?.text?.startsWith(mButterKnifeBindEntry) == true){
+                        TrackKit.modifyAfterButterKnifeBind(it)
+                    } else {
+                        TrackKit.trackOtherModify(it, anchorMethod?.name.orEmpty())
+                    }
                     insertBindClickMethod(it, bindClickVos, onClickAnnotations)
                     insertBindViewsMethod(it, bindViewFields, bindViewAnnotations)
                 }
+            } else {
+                TrackKit.onDeleteImport(it)
             }
             deleteButterKnifeStatement(it)
             handleInnerClass(it.innerClasses)
