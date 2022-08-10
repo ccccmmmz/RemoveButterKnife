@@ -231,16 +231,42 @@ class ButterActionDelegate(
         return pair
     }
 
+    /**
+     * allMethods 包括了超类的方法
+     * methods 只是当前类的方法
+     */
     private fun findCustomProjectImpl(psiClass: PsiClass) : Pair<PsiMethod?, PsiStatement?>{
-        val bindMethod = psiClass.methods.find {
+        var bindMethod = psiClass.methods.find {
             mMatchMethodSet.contains(it.name)
-        } ?: return Pair(null, null)
+        }
+
+
+        //当前类的方法找不到, 查找超类的
+        if (bindMethod == null) {
+            val superMatchMethod = psiClass.allMethods.find {
+                mMatchMethodSet.contains(it.name)
+            }
+            superMatchMethod.takeIf { it != null }?.let {
+                //创建一个超类方法的实现
+                val method = elementFactory.createMethodFromText(
+                    "@Override\n" +
+                            "    protected void stepAllViews(View root, Bundle savedInstanceState) {\n" +
+                            "        super.stepAllViews(root, savedInstanceState);\n" +
+                            "    }", psiClass
+                )
+                bindMethod = psiClass.addAfter(method, psiClass.methods[0]) as? PsiMethod
+                method
+
+            }
+        }
+        if (bindMethod == null) {
+            return Pair(null, null)
+        }
+
         butterknifeView = "root"
-
-
-        val size = bindMethod.body?.statements?.size
-        return Pair(bindMethod, if (size != 0) bindMethod.body?.statements?.get(0) else {
-            bindMethod.firstChild as? PsiStatement
+        val size = bindMethod?.body?.statements?.size
+        return Pair(bindMethod, if (size != 0) bindMethod?.body?.statements?.get(0) else {
+            bindMethod?.firstChild as? PsiStatement
         })
     }
 
@@ -292,10 +318,10 @@ class ButterActionDelegate(
             }
             anchorStatement = if (anchorSuper) {
                 //插入锚点是super 放之后
-                anchorMethod?.addAfter(callBindViewsState, anchorStatement) as? PsiStatement
+                anchorMethod?.addAfter(callBindViewsState, anchorStatement)
             } else {
                 //不是super 放之前
-                anchorMethod?.addBefore(callBindViewsState, anchorStatement) as? PsiStatement
+                anchorMethod?.addBefore(callBindViewsState, anchorStatement)
             }
 
 
