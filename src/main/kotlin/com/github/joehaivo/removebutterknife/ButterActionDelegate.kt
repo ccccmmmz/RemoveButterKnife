@@ -348,7 +348,8 @@ class ButterActionDelegate(
         }
         //匹配*.R;导包
         val psiImportStatement = psiJavaFile.importList?.importStatements?.find {
-            it.qualifiedName?.contains(".R;") == true
+            val qualifiedName = it.qualifiedName.orEmpty()
+            qualifiedName.isNotEmpty() && qualifiedName.substring(qualifiedName.length - 2, qualifiedName.length) == ".R"
         }
 
 
