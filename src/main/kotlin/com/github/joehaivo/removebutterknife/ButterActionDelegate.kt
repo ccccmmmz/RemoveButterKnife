@@ -483,7 +483,7 @@ class ButterActionDelegate(
 
     private fun insertViewImportIfAbsent(psiClass: PsiClass){
         val findViewImport = psiJavaFile.importList?.importStatements?.find {
-            it.text.equals("android.view.View")
+            it.text.contains("android.view.View", true)
         }
         if (findViewImport == null) {
 //            val lastChild = psiJavaFile.importList?.lastChild
@@ -495,6 +495,7 @@ class ButterActionDelegate(
 //            //log("插入 $mViewImportState 时 ${PluginCompanion.mImportViewStatement}")
 //
 //            psiJavaFile.importList?.addAfter(PluginCompanion.mImportViewStatement?: return, lastChild)
+            log("没有发现view导包")
             writeImport(mViewImportState)
         } else {
             //有view导包
