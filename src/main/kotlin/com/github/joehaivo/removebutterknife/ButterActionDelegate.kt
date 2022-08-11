@@ -495,7 +495,6 @@ class ButterActionDelegate(
 //            //log("插入 $mViewImportState 时 ${PluginCompanion.mImportViewStatement}")
 //
 //            psiJavaFile.importList?.addAfter(PluginCompanion.mImportViewStatement?: return, lastChild)
-            log("没有发现view导包")
             writeImport(mViewImportState)
         } else {
             //有view导包
