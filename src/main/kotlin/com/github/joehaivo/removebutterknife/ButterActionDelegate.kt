@@ -687,7 +687,7 @@ class ButterActionDelegate(
                     "private void __bindClicks(View ${butterknifeView}) {}\n", psiClass
                 )
             }
-            importMyDebouncingListenerIfAbsent()
+            //importMyDebouncingListenerIfAbsent()
             onClickVOs.forEach {
                 //lambda 转化
                 val setClickState = elementFactory.createStatementFromText(
@@ -709,6 +709,7 @@ class ButterActionDelegate(
         }
     }
 
+    @Deprecated("java 8已用lambda快捷实现")
     private fun importMyDebouncingListenerIfAbsent() {
         deBouncingClass ?: return
         val debouncingImportState = psiJavaFile.importList?.importStatements?.find {

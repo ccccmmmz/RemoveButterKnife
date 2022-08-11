@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.joehaivo"
-version = "1.4.71"
+version = "1.4.72"
 repositories {
     mavenCentral()
     google()
