@@ -73,8 +73,10 @@ class ButterActionDelegate(
         val (bindClickVos, onClickAnnotations) = collectOnClickAnnotation(psiClass)
         var needInterrupt = false
         if (bindClickVos.isNotEmpty() || bindViewFields.isNotEmpty()) {
+            //有@bindView或者@OnClick的
             val pair = findAnchors(psiClass)
             if (pair.first == null) {
+                //没有找到锚点信息 暂时不删除相关代码
                 needInterrupt = true
                 Notifier.notifyError(project!!, "RemoveButterKnife tools: 未在文件${psiClass.name}找到合适的代码插入位置，跳过 pair = $pair")
             } else {
@@ -403,16 +405,16 @@ class ButterActionDelegate(
                 ifStateArray?.forEach { statement ->
                     val lastChild = statement.lastChild
                     if (lastChild is PsiBlockStatement) {
-                        val expressionArray = lastChild.codeBlock.getChildrenOfType<PsiExpressionStatement>()
-                        if (expressionArray.isNotEmpty()) {
-                            val psiExpressionStatement = expressionArray.find {
+                        val expressionStateArray = lastChild.codeBlock.getChildrenOfType<PsiExpressionStatement>()
+                        if (expressionStateArray.isNotEmpty()) {
+                            val psiExpressionStatement = expressionStateArray.find {
                                 it.text.startsWith(mButterKnifeBindEntry)
                             }
                             if (psiExpressionStatement != null) {
+                                //if代码块中插入
                                 anchorMethod = it
                                 anchorState = psiExpressionStatement
                                 anchorIfState = statement
-                                //log("插入代码可能有风险---${psiJavaFile.name}")
                             }
 
                         }
@@ -444,6 +446,7 @@ class ButterActionDelegate(
                 //不存在
             } else {
                 binaryExpressions.forEach {
+                    //左表达式或者右表达式跟ButterKnife.bind()的参数内容一样则锚点定位到if代码块
                     if (it.lOperand.text.contains(butterknifeView.orEmpty()) || it.rOperand?.text?.contains(butterknifeView.orEmpty()) == true) {
                         //butterknifeView 作为判断条件的话将anchor放在if代码块后边
                         pair = Pair(anchorMethod, anchorIfState)

@@ -16,10 +16,12 @@ object TrackKit {
     //k className v methodName
     private val mAllModify by lazy { HashMap<String, String>() }
 
+    //step方法或者构造方法插入
     private val mStepViewCase by lazy { HashMap<String, String>() }
 
+    //只有bind操作没有@bindView或者onClick
     private val mOnlyDeleteImport by lazy { hashSetOf<String>() }
-
+    //没匹配到
     private val mNoDeleteCase by lazy { hashSetOf<String>() }
 
     @Synchronized
@@ -46,17 +48,6 @@ object TrackKit {
         mNoDeleteCase.add(psiClass.name.orEmpty())
     }
 
-
-
-    fun printModifyLog() : String{
-        val resultPrint =
-            "total size ${mAllModify.size}, after bind cast ${mAfterBindCase.size} files= ${mAfterBindCase.keys}, \n\n\n" +
-                    "other case ${mStepViewCase.size} files = $mStepViewCase \n\n\n, " +
-                    "onlyDelete cast ${mOnlyDeleteImport.size}, files = $mOnlyDeleteImport \n\n\n" +
-                    ", noDelete case ${mNoDeleteCase.size} files = $mNoDeleteCase"
-        reset()
-        return resultPrint
-    }
 
     fun getModifyLog() : Array<String>{
         val arrayOf = arrayOf("ButterKnife.bind( insert ${mAfterBindCase.keys}", "other case insert $mStepViewCase",
