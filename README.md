@@ -26,7 +26,7 @@
 
 ### 3. 安装
 
-- 在[Releases](https://github.com/Joehaivo/RemoveButterKnife/releases)中找到最新版本的Jar文件下载到本地
+- 在[Releases](https://github.com/ccccmmmz/RemoveButterKnife/releases)中找到最新版本的Jar文件下载到本地
 
 - 打开`Android Studio` > `Preferences(MacOS)/Settings(Windows)` > `Plugins` > `Install Plugin from Disk...(右上角小齿轮⚙️)` 找到刚才的Jar包安装
 
