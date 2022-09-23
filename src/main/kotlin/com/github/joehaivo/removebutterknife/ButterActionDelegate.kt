@@ -63,6 +63,8 @@ class ButterActionDelegate(
 
     private val mButterKnifeBindEntry = "ButterKnife.bind("
 
+    private var statementInIfStatement = false
+
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
             return false
@@ -318,11 +320,11 @@ class ButterActionDelegate(
             if (anchorStatement?.text?.startsWith("super.") == true || anchorStatement?.text?.startsWith("super(") == true){
                 anchorSuper = true
             }
-            anchorStatement = if (anchorSuper) {
+            anchorStatement = if (anchorSuper || statementInIfStatement) {
                 //插入锚点是super 放之后
                 anchorMethod?.addAfter(callBindViewsState, anchorStatement)
             } else {
-                //不是super 放之前
+                //不是super 放之前 有if表达式情况要放之后
                 anchorMethod?.addBefore(callBindViewsState, anchorStatement)
             }
 
@@ -450,6 +452,7 @@ class ButterActionDelegate(
                     if (it.lOperand.text.contains(butterknifeView.orEmpty()) || it.rOperand?.text?.contains(butterknifeView.orEmpty()) == true) {
                         //butterknifeView 作为判断条件的话将anchor放在if代码块后边
                         pair = Pair(anchorMethod, anchorIfState)
+                        statementInIfStatement = true
                     }
                 }
             }

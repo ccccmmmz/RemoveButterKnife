@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.github.joehaivo"
-version = "1.4.74"
+version = "1.5.2"
 repositories {
     mavenCentral()
     google()
@@ -17,7 +17,7 @@ intellij {
 //    type.set("IU") // Target IDE Platform
     //Target IDE Platform install path
 //    localPath.set("/Users/ligen/Applications/JetBrains Toolbox/IntelliJ IDEA Ultimate.app/Contents")
-    localPath.set("D:\\Program Files\\toolsbox\\apps\\AndroidStudio\\ch-0\\212.5712.43.2112.8609683")
+    localPath.set("D:\\Program Files\\toolsbox\\apps\\AndroidStudio\\ch-0\\213.7172.25.2113.9014738")
     plugins.set(
         listOf(
             "Kotlin",
