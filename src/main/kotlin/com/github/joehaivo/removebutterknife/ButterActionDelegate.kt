@@ -65,6 +65,11 @@ class ButterActionDelegate(
 
     private var statementInIfStatement = false
 
+    /**
+     * butterknife插件替换方法名
+     */
+    private val bindMethodImplName = "bindViewImpl"
+
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
             return false
@@ -285,7 +290,7 @@ class ButterActionDelegate(
         // 构建__bindViews()方法及方法体
         val args = if (butterknifeView.isNullOrEmpty()) "" else "View $butterknifeView"
         var bindViewsMethod =
-            elementFactory.createMethodFromText("private void __bindViews(${args}) {}\n", this.psiClass)
+            elementFactory.createMethodFromText("private void $bindMethodImplName(${args}) {}\n", this.psiClass)
         writeAction {
             val caller = if (butterknifeView.isNullOrEmpty()) "" else "${butterknifeView}."
             bindViewFields.forEach { (R_id_view, psiField) ->
@@ -306,7 +311,7 @@ class ButterActionDelegate(
                 if (parameterList?.size == 0) "" else parameterList?.get(0)?.name
             } else butterknifeView
 
-            val callBindViewsState = elementFactory.createStatementFromText("__bindViews($para);\n", this.psiClass)
+            val callBindViewsState = elementFactory.createStatementFromText("$bindMethodImplName($para);\n", this.psiClass)
             if (anchorStatement == null) {
                 anchorStatement = anchorMethod?.lastChild
                 if (anchorStatement is PsiCodeBlockImpl) {
