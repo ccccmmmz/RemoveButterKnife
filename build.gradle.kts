@@ -17,7 +17,8 @@ intellij {
 //    type.set("IU") // Target IDE Platform
     //Target IDE Platform install path
 //    localPath.set("/Users/ligen/Applications/JetBrains Toolbox/IntelliJ IDEA Ultimate.app/Contents")
-    localPath.set("D:\\Program Files\\toolsbox\\apps\\AndroidStudio\\ch-0\\213.7172.25.2113.9014738")
+    //替换成当前ide安装目录
+    localPath.set("D:\\dev\\ide\\ide\\apps\\AndroidStudio\\ch-0\\221.6008.13.2211.9477386")
     plugins.set(
         listOf(
             "Kotlin",

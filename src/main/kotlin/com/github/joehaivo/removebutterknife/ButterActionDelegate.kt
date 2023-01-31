@@ -70,6 +70,11 @@ class ButterActionDelegate(
      */
     private val bindMethodImplName = "bindViewImpl"
 
+    /**
+     * onClick方法提取名
+     */
+    private val bindClickMethodName = "bindClickImpl"
+
     fun parse(): Boolean {
         if (!checkIsNeedModify()) {
             return false
@@ -287,7 +292,7 @@ class ButterActionDelegate(
         if (bindViewFields.isEmpty()) {
             return
         }
-        // 构建__bindViews()方法及方法体
+        // 构建bindClickMethodName()方法及方法体
         val args = if (butterknifeView.isNullOrEmpty()) "" else "View $butterknifeView"
         var bindViewsMethod =
             elementFactory.createMethodFromText("private void $bindMethodImplName(${args}) {}\n", this.psiClass)
@@ -298,13 +303,13 @@ class ButterActionDelegate(
                 val findViewState = elementFactory.createStatementFromText(findViewStr, this.psiClass)
                 bindViewsMethod.lastChild.add(findViewState)
             }
-            // 将__bindViews(){}插入到anchorMethod之后
+            // 将bindClickMethodName(){}插入到anchorMethod之后
             try {
                 bindViewsMethod = psiClass.addAfter(bindViewsMethod, anchorMethod) as PsiMethod
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            // 将__bindViews();调用插入到anchorMethod里anchorStatement之后
+            // 将bindClickMethodName();调用插入到anchorMethod里anchorStatement之后
             //stepView impl
             val parameterList = this.anchorMethod?.parameterList?.parameters
             val para = if (butterknifeView.isNullOrEmpty()) {
@@ -691,11 +696,11 @@ class ButterActionDelegate(
             // 构建__bindClicks()方法体
             var caller = ""
             val bindClickMethod = if (butterknifeView == null) {
-                elementFactory.createMethodFromText("private void __bindClicks() {}\n", psiClass)
+                elementFactory.createMethodFromText("private void $bindClickMethodName() {}\n", psiClass)
             } else {
                 caller = "${butterknifeView}."
                 elementFactory.createMethodFromText(
-                    "private void __bindClicks(View ${butterknifeView}) {}\n", psiClass
+                    "private void $bindClickMethodName(View ${butterknifeView}) {}\n", psiClass
                 )
             }
             //importMyDebouncingListenerIfAbsent()
@@ -708,15 +713,15 @@ class ButterActionDelegate(
                 bindClickMethod.lastChild.add(setClickState)
             }
             val para = if (butterknifeView == null) "" else butterknifeView
-            val callBindClickState = elementFactory.createStatementFromText("__bindClicks($para);\n", psiClass)
-            // 插入__bindClicks()调用
+            val callBindClickState = elementFactory.createStatementFromText("$bindClickMethodName($para);\n", psiClass)
+            // 插入$bindClickMethodName()调用
             anchorStatement = anchorMethod?.addAfter(callBindClickState, anchorStatement) as? PsiStatement
-            // 插入__bindClicks()方法体
+            // 插入$bindClickMethodName()方法体
             psiClass.addAfter(bindClickMethod, anchorMethod)
             onClickAnnotations.forEach {
                 it.delete()
             }
-            Logger.info("__bindClicks: ${bindClickMethod.text}")
+            Logger.info("$bindClickMethodName: ${bindClickMethod.text}")
         }
     }
 
